@@ -1,0 +1,7 @@
+[console_scripts]
+hello-agent = hello_agent.app:main
+hello-agent-admin = hello_agent.admin_cli:main
+hello-agent-knowledge-mcp = hello_agent.knowledge_mcp_server:main
+hello-agent-reindex-knowledge = hello_agent.reindex_knowledge:main
+hello-agent-task-worker = hello_agent.task_worker:main
+hello-agent-weather-mcp = hello_agent.weather_mcp_server:main

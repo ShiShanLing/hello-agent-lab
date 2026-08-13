@@ -1,0 +1,83 @@
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    location = / {
+        return 404;
+    }
+
+    location = /angular20 {
+        return 301 /angular20/;
+    }
+
+    location /angular20/api/ {
+        proxy_pass http://127.0.0.1:3000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /angular20/uploads/ {
+        alias /var/www/uploads/;
+        expires 30d;
+    }
+
+    location /angular20/ {
+        root /var/www/projects;
+        try_files $uri $uri/ /angular20/index.html;
+    }
+
+    location = /agent {
+        return 301 /agent/;
+    }
+
+    location /agent/api/ {
+        client_max_body_size 10m;
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location = /agent/todo {
+        return 301 /agent/todo/;
+    }
+
+    location /agent/todo/ {
+        root /var/www/projects;
+        try_files $uri $uri/ /agent/todo/index.html;
+    }
+
+    location = /agent/admin {
+        return 301 /agent/admin/;
+    }
+
+    location /agent/admin/ {
+        root /var/www/projects;
+        try_files $uri $uri/ /agent/admin/index.html;
+    }
+
+    location /agent/ {
+        root /var/www/projects;
+        try_files $uri $uri/ /agent/index.html;
+    }
+
+    location /swagger-ui-static/ {
+        alias /var/www/swagger-ui/;
+        expires 7d;
+    }
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss image/svg+xml;
+}
