@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.HelloAgentShell" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/shell_primary</item>
+        <item name="colorPrimaryContainer">@color/shell_primary_dark</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSurface">@color/shell_surface</item>
+        <item name="colorOnSurface">@color/shell_on_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">true</item>
+    </style>
+</resources>
