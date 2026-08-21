@@ -184,20 +184,37 @@ FastAPI 会显示可交互的接口页面。先调用 `POST /chat`：
 
 API 使用 SQLAlchemy 将数据保存到 `data/agent.db`：Todo 位于 `todos` 表，对话位于 `chat_messages` 表，并用 `session_id` 隔离不同会话。服务器重启后，使用同一个 `session_id` 就能恢复模型的对话记忆。为控制发送给模型的上下文长度，每次恢复最近 40 条消息，数据库中的完整记录不会因此删除。
 
+## 三个前端
+
+仓库里有三个必须分开开发和发布的网页，各自目录下有完整说明。框架都是 **React 19.2 + TypeScript ~6.0 + Vite 8**；编译环境统一为仓库 `.nvmrc` 的 **Node.js 26.5.0**（`package.json` 最低要求 `>=20.19.0`），包管理器为 **npm**。生产构建命令都是 `npm run build`（`tsc -b && vite build`）。
+
+| 应用 | 目录 | 本地访问 | 生产访问 | 说明 |
+| --- | --- | --- | --- | --- |
+| Agent 主站 | `frontend/` | http://127.0.0.1:5173/ | https://106.13.175.227/agent/ | [frontend/README.md](frontend/README.md) |
+| Todo / 计划 | `todo-frontend/` | http://127.0.0.1:5174/ | https://106.13.175.227/agent/todo/ | [todo-frontend/README.md](todo-frontend/README.md) |
+| 管理后台 | `admin-frontend/` | http://127.0.0.1:5175/ | https://106.13.175.227/agent/admin/ | [admin-frontend/README.md](admin-frontend/README.md) |
+
+API 健康检查：https://106.13.175.227/agent/api/health  
+后端：Python **3.10+**，**FastAPI + Uvicorn**，本地默认 `http://127.0.0.1:8000`。
+
+主站和 Todo 共用 Agent 登录 Cookie；管理后台是另一套管理员账号和 MFA。生产环境必须走 HTTPS。
+
 ## React 聊天界面
 
-前端由最新版 React、TypeScript 和 Vite 构建，位于 `frontend`。后端保持运行，再打开第二个终端：
+前端由最新版 React、TypeScript 和 Vite 构建，位于 `frontend`（详见 [frontend/README.md](frontend/README.md)）。后端保持运行，再打开第二个终端：
 
 ```bash
-cd /Users/SSL/Documents/hello-agent-lab/frontend
-n exec 26.5.0 npm run dev
+cd frontend
+npm run dev
 ```
 
 浏览器打开 `http://127.0.0.1:5173`。前端会调用 FastAPI 的 `/chat/stream`，并把 `session_id` 保存在浏览器 Local Storage 中。再次打开同一浏览器窗口时，前端会调用 `GET /sessions/{session_id}/messages`，从 SQLite 读取并显示最近 200 条历史消息。
 
 ## 账号登录
 
-网页现在会先检查 HttpOnly 登录 Cookie。新用户可以使用邮箱、昵称和至少 8 位密码注册，注册后自动登录；已有用户使用邮箱和密码登录。密码通过带随机盐的 PBKDF2-SHA256 保存，数据库不会保存明文密码；登录 Cookie 对 JavaScript 不可见。聊天、历史记录、计划、Todo 同步和 MCP 工具接口都需要登录，并且后端会校验 Agent 会话属于当前用户。
+网页现在会先检查 HttpOnly 登录 Cookie `hello_agent_login`（`path=/`）。新用户可以使用邮箱、昵称和至少 8 位密码注册，注册后自动登录；已有用户使用邮箱和密码登录，也可以用邮箱验证码。密码通过带随机盐的 PBKDF2-SHA256 保存，数据库不会保存明文密码；登录 Cookie 对 JavaScript 不可见。聊天、历史记录、计划、Todo 同步和 MCP 工具接口都需要登录，并且后端会校验 Agent 会话属于当前用户。
+
+工坊（Angular）等站外入口可以带 `?next=/angular20/` 打开本站。登录成功后，主站只允许跳回安全的 `/angular20` 路径，不会跟随任意外部地址。Todo 使用同一套 Cookie；管理后台不能用这颗 Cookie 进入。
 
 登录相关接口：
 
@@ -205,10 +222,14 @@ n exec 26.5.0 npm run dev
 - `POST /auth/login`
 - `GET /auth/me`
 - `POST /auth/logout`
+- `POST /auth/password-reset/request`（发送重置链接邮件；不暴露邮箱是否存在）
+- `POST /auth/password-reset/confirm`（凭邮件链接中的 token 设置新密码并登录）
+- `POST /auth/email-login/send`（发送 6 位登录验证码；不暴露邮箱是否存在）
+- `POST /auth/email-login/verify`（校验验证码并登录）
 
-开发环境中，两个 Vite 前端都通过同源 `/api` 代理访问 `127.0.0.1:8000`，浏览器和手机不再直接跨域请求 8000 端口。因此后端按普通方式启动即可，前端会自动监听局域网地址。正式部署必须使用 HTTPS，并设置 `AUTH_COOKIE_SECURE=true` 和准确的 `FRONTEND_ORIGINS`，同时增加登录限流和密码找回能力。
+开发环境中，两个 Vite 前端都通过同源 `/api` 代理访问 `127.0.0.1:8000`，浏览器和手机不再直接跨域请求 8000 端口。因此后端按普通方式启动即可，前端会自动监听局域网地址。正式部署必须使用 HTTPS，并设置 `AUTH_COOKIE_SECURE=true`、准确的 `FRONTEND_ORIGINS`（以及可选的 `PUBLIC_APP_ORIGIN`），并配置 SMTP 以启用密码找回与验证码登录。
 
-聊天发送使用 `POST /chat/stream`。FastAPI 把 DeepSeek 返回的内容包装成 SSE 事件，React 通过 `ReadableStream` 持续读取并更新同一个回答气泡，因此不需要等待完整回答生成后再显示。原来的非流式 `POST /chat` 仍然保留，方便对比和调试。
+聊天发送使用 `POST /chat/stream`。FastAPI 把 DeepSeek 返回的内容包装成 SSE 事件，React 通过 `ReadableStream` 持续读取并更新同一个回答气泡，因此不需要等待完整回答生成后再显示。生成过程中，发送按钮会变为停止按钮；点击后浏览器立即中止读取，并通过 `POST /chat/generations/{request_id}/cancel` 通知后端停止后续模型流和工具轮次。原来的非流式 `POST /chat` 仍然保留，方便对比和调试。
 
 ## 聊天附件（文本分析）
 
@@ -358,22 +379,22 @@ Todo 已从 JSON 文件升级到 SQLite，ORM 使用 SQLAlchemy 2。第一次启
 
 ## 独立 Todo 应用
 
-`todo-frontend` 是使用 React、TypeScript 和 Vite 创建的独立 Todo 网页，默认运行在 `http://localhost:5174`。它与 Agent 网页共用同一套账号 Cookie 和 FastAPI 后端。Todo 已按 `user_id` 隔离，同一用户的多个 Agent 会话共享任务。
+`todo-frontend` 是使用 React、TypeScript 和 Vite 创建的独立 Todo 网页，默认运行在 `http://localhost:5174`（详见 [todo-frontend/README.md](todo-frontend/README.md)）。它与 Agent 网页共用同一套账号 Cookie 和 FastAPI 后端。Todo 已按 `user_id` 隔离，同一用户的多个 Agent 会话共享任务。
 
 Todo 使用“计划 → 步骤”的两层结构。Agent 结构化计划同步时，会同时保存计划标题、说明、优先级和用户选中的步骤；每个步骤只属于对应计划。Todo 页面按计划显示步骤数量、预计总时间和完成进度。用户也可以手动新建其他计划，再把任务添加到指定计划。升级前已经存在的独立任务不会丢失，会显示在“未分类任务”中。
 
 启动 Todo 网页：
 
 ```bash
-cd /Users/SSL/Documents/hello-agent-lab/todo-frontend
-n exec 26.5.0 npm run dev
+cd todo-frontend
+npm run dev
 ```
 
 Todo 应用支持新建计划、向指定计划添加任务、筛选、完成、恢复、删除和手动刷新同步。布局针对手机浏览器进行了响应式适配。手机与电脑连接同一个 Wi-Fi 后，使用终端输出的 `Network` 地址并将端口改为 `5174` 即可访问。
 
 ## 管理后台
 
-`admin-frontend` 是独立的 React、TypeScript 和 Vite 管理端，开发环境默认运行在 `http://localhost:5175`，生产路径为 `/agent/admin/`。后台使用独立的 `admin_users`、后台密码、MFA 会话和 HttpOnly Cookie；Agent 用户登录 Cookie 无法访问任何后台接口。
+`admin-frontend` 是独立的 React、TypeScript 和 Vite 管理端（详见 [admin-frontend/README.md](admin-frontend/README.md)），开发环境默认运行在 `http://localhost:5175`，生产路径为 `/agent/admin/`。后台使用独立的 `admin_users`、后台密码、MFA 会话和 HttpOnly Cookie；Agent 用户登录 Cookie 无法访问任何后台接口。
 
 管理后台提供系统汇总、用户权限管理、操作审计和安全设置。后台管理员可以在 `knowledge_manager` 与 `member` 之间调整 Agent 用户角色，或启用、停用 Agent 账号；变更后目标账号的现有 Agent 登录会话会立即失效。
 
@@ -393,9 +414,22 @@ hello-agent-admin --email admin@example.com --name 系统管理员
 
 后台会话无操作 30 分钟失效，最长 8 小时。正式启用 HTTPS 后，应同时设置 `ADMIN_COOKIE_SECURE=true`。
 
+## 生产稳定性与备份
+
+生产站点使用 HTTPS，HTTP 请求统一跳转至 HTTPS，登录 Cookie 只通过加密连接发送。SQLite 连接启用 WAL、10 秒忙等待和外键约束，以减少聊天、Worker 与定时任务并发写入时的锁冲突。`GET /health` 同时返回数据库、Redis、调度器和 OCR 状态。
+
+`hello-agent-backup.timer` 每天创建一份运行时完整备份，内容包括 SQLite 在线快照、用户知识文件、聊天附件、服务器环境配置和 Redis RDB，并为每个文件记录 SHA-256 校验值。默认保留 14 份，目录为 `/var/lib/hello-agent/backups/daily/`；可通过 `HELLO_AGENT_BACKUP_MIRROR_DIR` 再复制到另一块磁盘或已挂载的远程存储。
+
+手动备份及校验：
+
+```bash
+systemctl start hello-agent-backup.service
+python /opt/hello-agent/deploy/backup_runtime.py --verify /var/lib/hello-agent/backups/daily/具体备份目录
+```
+
 启动管理端：
 
 ```bash
-cd /Users/SSL/Documents/hello-agent-lab/admin-frontend
-n exec 20.19.0 npm run dev
+cd admin-frontend
+npm run dev
 ```
