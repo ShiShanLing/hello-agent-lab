@@ -11,6 +11,7 @@ import { PlanCard } from './PlanCard'
 import type { GoalPlan } from './PlanCard'
 import { TravelPlanCard } from './TravelPlanCard'
 import type { TravelPlan, TravelWorkflow } from './TravelPlanCard'
+import { consumeSafeNextRedirect } from './postLoginRedirect'
 import { MetricsDashboard } from './MetricsDashboard'
 
 const WorkflowStudio = lazy(() =>
@@ -862,6 +863,11 @@ function App() {
     void restoreLogin()
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    if (!currentUser) return
+    consumeSafeNextRedirect()
+  }, [currentUser])
 
   useEffect(() => {
     if (!currentUser) return
