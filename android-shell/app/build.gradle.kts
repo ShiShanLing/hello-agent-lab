@@ -4,9 +4,9 @@ plugins {
 }
 
 val helloAgentBaseUrl = providers.gradleProperty("helloAgentBaseUrl")
-    .orElse("https://106.13.175.227")
+    .orElse("https://shishanling.cn")
 val angular20Url = providers.gradleProperty("angular20Url")
-    .orElse("https://106.13.175.227/angular20/")
+    .orElse("https://shishanling.cn/angular20/")
 
 android {
     namespace = "com.shishanling.helloagentshell"
@@ -16,8 +16,8 @@ android {
         applicationId = "com.shishanling.helloagentshell"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "HELLO_AGENT_BASE_URL", "\"${helloAgentBaseUrl.get().trimEnd('/')}\"")
@@ -55,4 +55,5 @@ dependencies {
     implementation("com.google.android.material:material:1.10.0")
     implementation("androidx.activity:activity-ktx:1.8.2")
     implementation("androidx.webkit:webkit:1.8.0")
+    testImplementation("junit:junit:4.13.2")
 }

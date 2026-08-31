@@ -5,7 +5,7 @@
 - `Agent`: `/agent/`
 - `Todo`: `/agent/todo/`
 - `Admin`: `/agent/admin/`
-- `Angular20`: 外部 URL
+- `Angular20`: `/angular20/`
 
 ## 目录
 
@@ -21,8 +21,8 @@
 在 `gradle.properties` 中修改：
 
 ```properties
-helloAgentBaseUrl=https://106.13.175.227
-angular20Url=https://106.13.175.227/angular20/
+helloAgentBaseUrl=https://shishanling.cn
+angular20Url=https://shishanling.cn/angular20/
 ```
 
 构建时会生成：
@@ -42,6 +42,23 @@ APK 输出：
 ```text
 android-shell/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## 在线更新
+
+- 更新清单：`https://shishanling.cn/hello-agent-app/version.json`
+- APK 下载：`ShiShanLing/hello-agent-lab` 的 GitHub Releases
+- 启动后自动静默检查，也可从右上角菜单选择“检查更新”
+- 有新版本时显示版本号和更新说明，下载完成后打开 Android 系统安装界面
+- 首次在线安装需要在 Android 设置中允许本应用安装未知来源应用
+
+发布前先提交 `android-shell/` 的改动，然后运行：
+
+```bash
+./android-shell/scripts/publish-release.sh
+```
+
+脚本会运行单元测试、构建 APK、创建或更新 GitHub Release，并把 `version.json`
+上传到服务器 `/var/www/hello-agent-app/version.json`。
 
 ## 登录态说明
 

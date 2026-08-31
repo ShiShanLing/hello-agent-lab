@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -22,7 +23,9 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.content.FileProvider
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -32,10 +35,18 @@ import androidx.webkit.WebViewFeature
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.navigation.NavigationView
 import com.shishanling.helloagentshell.databinding.ActivityMainBinding
+import java.io.File
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var currentModule = ModuleRegistry.agent
+    private val updateClient by lazy { AppUpdateClient() }
+    private val updateExecutor = Executors.newSingleThreadExecutor()
+    private var isCheckingUpdate = false
+    private var updateProgressDialog: AlertDialog? = null
+    private var pendingInstallApk: File? = null
+    private var waitingForInstallPermission = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +66,22 @@ class MainActivity : AppCompatActivity() {
             binding.webView.restoreState(savedInstanceState)
             setToolbarTitle(currentModule.title)
         }
+
+        binding.root.postDelayed({ checkForUpdates(userInitiated = false) }, UPDATE_CHECK_DELAY_MS)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (waitingForInstallPermission && packageManager.canRequestPackageInstalls()) {
+            waitingForInstallPermission = false
+            pendingInstallApk?.let(::launchInstaller)
+        }
+    }
+
+    override fun onDestroy() {
+        updateProgressDialog?.dismiss()
+        updateExecutor.shutdownNow()
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -71,6 +98,7 @@ class MainActivity : AppCompatActivity() {
             )
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         }
+        menu.add(0, MENU_CHECK_UPDATE, 1, getString(R.string.check_for_updates))
         menu.add(0, MENU_OPEN_BROWSER, 0, getString(R.string.open_in_browser))
         return true
     }
@@ -94,6 +122,11 @@ class MainActivity : AppCompatActivity() {
 
             MENU_OPEN_BROWSER -> {
                 openInBrowser(binding.webView.url ?: currentModule.url)
+                true
+            }
+
+            MENU_CHECK_UPDATE -> {
+                checkForUpdates(userInitiated = true)
                 true
             }
 
@@ -188,7 +221,7 @@ class MainActivity : AppCompatActivity() {
             allowFileAccess = false
             allowContentAccess = true
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = "$userAgentString HelloAgentShell/0.1"
+            userAgentString = "$userAgentString HelloAgentShell/${BuildConfig.VERSION_NAME}"
         }
 
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
@@ -321,9 +354,146 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkForUpdates(userInitiated: Boolean) {
+        if (isCheckingUpdate) return
+        isCheckingUpdate = true
+        if (userInitiated) {
+            Toast.makeText(this, R.string.checking_for_updates, Toast.LENGTH_SHORT).show()
+        }
+        updateExecutor.execute {
+            val result = runCatching { updateClient.fetchLatest() }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                isCheckingUpdate = false
+                result.onSuccess { info ->
+                    if (info.versionCode > BuildConfig.VERSION_CODE) {
+                        showUpdatePrompt(info)
+                    } else if (userInitiated) {
+                        Toast.makeText(
+                            this,
+                            getString(R.string.already_latest, BuildConfig.VERSION_NAME),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }.onFailure { error ->
+                    if (userInitiated) {
+                        MaterialAlertDialogBuilder(this)
+                            .setMessage(
+                                getString(
+                                    R.string.update_check_failed,
+                                    error.message ?: error.javaClass.simpleName,
+                                )
+                            )
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showUpdatePrompt(info: AppUpdateInfo) {
+        val notes = info.releaseNotes.ifBlank { getString(R.string.release_notes_fallback) }
+        val message = buildString {
+            append(getString(R.string.current_version, BuildConfig.VERSION_NAME))
+            append("\n\n")
+            append(notes)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.update_available, info.versionName))
+            .setMessage(message)
+            .setPositiveButton(R.string.download_update) { _, _ -> downloadAndInstall(info) }
+            .apply {
+                if (!info.forceUpdate) setNegativeButton(R.string.later, null)
+                setCancelable(!info.forceUpdate)
+            }
+            .show()
+    }
+
+    private fun downloadAndInstall(info: AppUpdateInfo) {
+        val safeVersion = info.versionName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val destination = File(cacheDir, "updates/hello-agent-shell-$safeVersion.apk")
+        updateProgressDialog?.dismiss()
+        updateProgressDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.update_available, info.versionName))
+            .setMessage(getString(R.string.downloading_update, 0))
+            .setCancelable(false)
+            .create()
+            .also { it.show() }
+
+        updateExecutor.execute {
+            val result = runCatching {
+                updateClient.download(info.apkUrl, destination) { progress ->
+                    runOnUiThread {
+                        updateProgressDialog?.setMessage(
+                            getString(R.string.downloading_update, progress)
+                        )
+                    }
+                }
+                destination
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                updateProgressDialog?.dismiss()
+                updateProgressDialog = null
+                result.onSuccess(::installApk).onFailure { error ->
+                    MaterialAlertDialogBuilder(this)
+                        .setMessage(
+                            getString(
+                                R.string.download_failed,
+                                error.message ?: error.javaClass.simpleName,
+                            )
+                        )
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun installApk(apk: File) {
+        if (!apk.isFile) return
+        pendingInstallApk = apk
+        if (packageManager.canRequestPackageInstalls()) {
+            launchInstaller(apk)
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.install_permission_title)
+            .setMessage(R.string.install_permission_message)
+            .setPositiveButton(R.string.open_settings) { _, _ ->
+                waitingForInstallPermission = true
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName"),
+                    )
+                )
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun launchInstaller(apk: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apk)
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, APK_MIME_TYPE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.installer_unavailable, Toast.LENGTH_LONG).show()
+        }
+    }
+
     companion object {
         private const val MENU_REFRESH = 1000
         private const val MENU_OPEN_BROWSER = 1001
+        private const val MENU_CHECK_UPDATE = 1002
         private const val TOOLBAR_TOP_INSET_REDUCTION_DP = 15
+        private const val UPDATE_CHECK_DELAY_MS = 1_500L
+        private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
     }
 }
