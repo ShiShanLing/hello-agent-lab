@@ -1792,6 +1792,24 @@ def create_api(
     ) -> dict[str, object]:
         return {"releases": list_release_records(limit=limit)}
 
+    @api.get("/admin/market-indices")
+    async def admin_market_indices(
+        refresh: bool = Query(default=False),
+        _admin: AdminPrincipal = Depends(current_admin),
+    ) -> dict[str, object]:
+        from hello_agent.market_indices import fetch_market_indices, load_cache, should_fetch
+
+        cached = load_cache()
+        if not refresh:
+            if cached is not None:
+                return cached
+        else:
+            if not should_fetch(cached):
+                if cached is not None:
+                    return {**cached, "from_cache": True}
+        result = await fetch_market_indices()
+        return {**result, "from_cache": False}
+
     @api.get("/admin/users", response_model=AdminUserListResponse)
     def admin_users(
         _admin: AdminPrincipal = Depends(current_admin),

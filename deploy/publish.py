@@ -153,7 +153,7 @@ def ensure_remote_dirs(host: str, release_id: str) -> dict[str, str]:
         " && ".join(
             [
                 f"mkdir -p {REMOTE_DATA}/backups {snapshot}/frontend {snapshot}/todo {snapshot}/admin {snapshot}/backend {snapshot}/knowledge {snapshot}/skills",
-                f"chmod 755 {REMOTE_RELEASES} {REMOTE_DATA}/backups {release_root} {snapshot}",
+                f"chmod 755 {release_root} {snapshot}",
             ]
         ),
     )
@@ -164,7 +164,6 @@ def sqlite_backup(host: str, release_id: str) -> str:
     db_path = f"{REMOTE_DATA}/agent.db"
     backup_name = f"agent-{release_id}.db"
     release_copy = f"{REMOTE_RELEASES}/{release_id}/{backup_name}"
-    rotating = f"{REMOTE_DATA}/backups/{backup_name}"
     exists = ssh(host, f"test -f {db_path} && echo yes || echo no")
     if exists != "yes":
         log(f"未找到 {db_path}，跳过 SQLite 备份")
@@ -178,10 +177,7 @@ def sqlite_backup(host: str, release_id: str) -> str:
         f"pathlib.Path({release_copy!r}).parent.mkdir(parents=True,exist_ok=True);"
         f"dst=sqlite3.connect({release_copy!r});"
         "src.backup(dst); dst.close(); src.close();"
-        f"import shutil; shutil.copy2({release_copy!r},{rotating!r});"
-        f"os.chmod({release_copy!r},0o644); os.chmod({rotating!r},0o644);"
-        "old=sorted(glob.glob('/var/lib/hello-agent/backups/agent-*.db'),key=os.path.getmtime,reverse=True)[20:];"
-        "[os.remove(item) for item in old]"
+        f"os.chmod({release_copy!r},0o644)"
         "\"",
     )
     return release_copy

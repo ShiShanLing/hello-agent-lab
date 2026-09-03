@@ -4,3 +4,21 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, select { font: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #6557d8; outline-offset: 2px; }
 a { color: inherit; }
+
+.site-icp-footer {
+  min-height: 32px;
+  padding: 6px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #86818f;
+  background: #f5f6f8;
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+}
+.site-icp-footer a { color: inherit; text-decoration: none; }
+.site-icp-footer a:hover { color: #6557d8; text-decoration: underline; }
+.site-icp-footer > span[aria-hidden="true"] { margin: 0 8px; }
+.public-security-record-link { display: inline-flex; align-items: center; gap: 4px; }
+.public-security-record-icon { flex: none; width: auto; height: 20px; object-fit: contain; }

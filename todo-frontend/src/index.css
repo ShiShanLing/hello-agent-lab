@@ -17,3 +17,21 @@ html { min-width: 320px; background: #f4f2f7; }
 body { min-width: 320px; min-height: 100svh; margin: 0; }
 button, input { font: inherit; }
 button:focus-visible, input:focus-visible { outline: 2px solid #8065e3; outline-offset: 2px; }
+
+.site-icp-footer {
+  min-height: 32px;
+  padding: 6px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--muted);
+  background: #f4f2f7f0;
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+}
+.site-icp-footer a { color: inherit; text-decoration: none; }
+.site-icp-footer a:hover { color: var(--purple); text-decoration: underline; }
+.site-icp-footer > span[aria-hidden="true"] { margin: 0 8px; }
+.public-security-record-link { display: inline-flex; align-items: center; gap: 4px; }
+.public-security-record-icon { flex: none; width: auto; height: 20px; object-fit: contain; }

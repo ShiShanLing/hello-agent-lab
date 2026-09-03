@@ -127,6 +127,8 @@ cd admin-frontend && npm run build
 
 `--targets` 必须显式给出，可选 `frontend`、`todo`、`admin`、`backend`、`knowledge`、`skills`。脚本会运行测试、检查 `dist/index.html` 资源前缀、备份 SQLite、检查 Redis 持久化、快照当前版本，再同步并验收四个生产地址。失败会回滚并写入 `/var/lib/hello-agent/releases/`。主站 `--delete` 仍必须排除 `admin/` 和 `todo/`，脚本已内置该检查。
 
+**发布到服务器时，必须同时把对应源码提交并推到 GitHub。** 禁止只更新生产、把改动留在本机工作区。GitHub 与生产落后，是上次行情页丢失的原因。不要提交 `.env`、密钥、数据库、上传文件、缓存或 `dist/`。
+
 ## 发布前检查
 
 1. 确认本次发布的是主站、Todo、管理后台、后端中的哪一个，不要默认发布全部应用。
@@ -152,7 +154,7 @@ http://106.13.175.227/agent/api/health
 
 ## 大功能自动发布
 
-完成一项新的大功能（新模块或新 Agent 能力，不是单纯改间距/文案）后，助手应在测试和必要构建通过后，用 `./deploy/publish.sh publish --targets ...` 发布受影响的部分，不必再等用户说“发布吧”。
+完成一项新的大功能（新模块或新 Agent 能力，不是单纯改间距/文案）后，助手应在测试和必要构建通过后，用 `./deploy/publish.sh publish --targets ...` 发布受影响的部分，并把对应源码 `commit` + `push` 到 GitHub，不必再等用户说“发布吧”或“提交吧”。
 
 仍须遵守本文全部发布红线：只发本次改动涉及的应用；主站删除同步必须排除 `admin/` 和 `todo/`；不得覆盖运行时数据；发布后检查四个生产地址。
 

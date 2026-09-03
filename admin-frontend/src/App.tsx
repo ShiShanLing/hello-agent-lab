@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { FormEvent } from 'react'
 import QRCode from 'qrcode'
 import projectIcon from './assets/project-icon-v1-optimized.png'
 import './App.css'
+import { ADMIN_PAGE_SLUGS, adminPageFromSlug, readPageSlug, writePageSlug } from './pageRoute'
 
 type Role = 'knowledge_manager' | 'member'
 
@@ -111,6 +112,32 @@ type KnowledgeSearchMatch = {
   content: string
   score: number
 }
+
+type MarketQuote = {
+  name: string
+  secid: string
+  type: string
+  price: number
+  pct: number
+  change: number
+  amount_yi: number
+  main_net_yi: number
+  up_count: number
+  down_count: number
+  flat_count: number
+}
+
+type MarketSnapshot = {
+  date: string
+  generated_at: string
+  pinned: MarketQuote[]
+  rest: MarketQuote[]
+  board_count: number
+  etf_count: number
+  from_cache?: boolean
+}
+
+type MarketSortKey = 'pct' | 'main_net_yi' | 'amount_yi'
 
 type CostPeriod = 'day' | 'week' | 'month'
 
@@ -479,8 +506,12 @@ function Login({ onLogin }: { onLogin: (user: CurrentUser) => void }) {
 function App() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [checking, setChecking] = useState(true)
-  const [activePage, setActivePage] = useState<'dashboard' | 'cost' | 'releases' | 'users' | 'admins' | 'audit' | 'security' | 'knowledge'>('dashboard')
+  const [activePage, setActivePage] = useState<
+    'dashboard' | 'cost' | 'market' | 'releases' | 'users' | 'admins' | 'audit' | 'security' | 'knowledge'
+  >(() => adminPageFromSlug(readPageSlug(ADMIN_PAGE_SLUGS)))
   const [costRefresh, setCostRefresh] = useState(0)
+  const [marketRefresh, setMarketRefresh] = useState(0)
+  const [marketRefreshing, setMarketRefreshing] = useState(false)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [adminUsers, setAdminUsers] = useState<ManagedAdminUser[]>([])
@@ -502,9 +533,20 @@ function App() {
     })()
   }, [])
 
+  useEffect(() => {
+    const onPop = () => setActivePage(adminPageFromSlug(readPageSlug(ADMIN_PAGE_SLUGS)))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  useEffect(() => {
+    if (!currentUser) return
+    writePageSlug(activePage === 'dashboard' ? '' : activePage)
+  }, [activePage, currentUser])
+
   const loadPage = async (page = activePage) => {
     if (!currentUser || currentUser.role !== 'admin') return
-    if (page === 'cost') {
+    if (page === 'cost' || page === 'market') {
       setLoading(false)
       setError(null)
       return
@@ -600,6 +642,7 @@ function App() {
         <nav>
           <button className={activePage === 'dashboard' ? 'active' : ''} onClick={() => setActivePage('dashboard')}><i><DashboardMenuIcon /></i><span>系统概览</span></button>
           <button className={activePage === 'cost' ? 'active' : ''} onClick={() => setActivePage('cost')}><i><CostMenuIcon /></i><span>总费用</span></button>
+          <button className={activePage === 'market' ? 'active' : ''} onClick={() => setActivePage('market')}><i><MarketMenuIcon /></i><span>行情概览</span></button>
           <button className={activePage === 'users' ? 'active' : ''} onClick={() => setActivePage('users')}><i><UsersMenuIcon /></i><span>用户与权限</span></button>
           <button className={activePage === 'admins' ? 'active' : ''} onClick={() => setActivePage('admins')}><i><AdminMenuIcon /></i><span>后台管理员</span></button>
           <button className={activePage === 'releases' ? 'active' : ''} onClick={() => setActivePage('releases')}><i><ReleaseMenuIcon /></i><span>发布记录</span></button>
@@ -610,13 +653,15 @@ function App() {
         <div className="sidebar-user"><img alt="" src={projectIcon} /><div><strong>{currentUser.display_name}</strong><small>系统管理员</small></div><button aria-label="退出登录" className="logout-button" data-tooltip="退出登录" onClick={() => void logout()} title="退出登录">↪</button></div>
       </aside>
 
-      <main className="admin-main">
-        <header className="topbar"><div><span>后台管理控制台</span><h1>{activePage === 'dashboard' ? '系统概览' : activePage === 'cost' ? '总费用' : activePage === 'releases' ? '发布记录' : activePage === 'users' ? '用户与权限' : activePage === 'admins' ? '后台管理员' : activePage === 'audit' ? '审计日志' : '安全设置'}</h1></div><div><button disabled={loading} onClick={() => { if (activePage === 'cost') setCostRefresh((tick) => tick + 1); else void loadPage() }}>↻ 刷新</button></div></header>
+      <main className={marketRefreshing ? 'admin-main admin-main-refreshing' : 'admin-main'}>
+        {marketRefreshing && <div aria-hidden="true" className="market-refresh-overlay" />}
+        <header className="topbar"><div><span>后台管理控制台</span><h1>{activePage === 'dashboard' ? '系统概览' : activePage === 'cost' ? '总费用' : activePage === 'market' ? '行情概览' : activePage === 'releases' ? '发布记录' : activePage === 'users' ? '用户与权限' : activePage === 'admins' ? '后台管理员' : activePage === 'audit' ? '审计日志' : '安全设置'}</h1></div><div><button disabled={loading || marketRefreshing} onClick={() => { if (activePage === 'cost') setCostRefresh((tick) => tick + 1); else if (activePage === 'market') setMarketRefresh((tick) => tick + 1); else void loadPage() }}>↻ 刷新</button></div></header>
         {error && <div className="page-error" role="alert">{error}</div>}
         {loading && !overview && users.length === 0 && adminUsers.length === 0 && auditLogs.length === 0 && knowledgeDocuments.length === 0 ? <div className="page-loading">正在加载安全数据…</div> : null}
 
         {activePage === 'dashboard' && overview && <Dashboard overview={overview} />}
         {activePage === 'cost' && <CostPage onError={setError} refreshKey={costRefresh} />}
+        {activePage === 'market' && <MarketPage onRefreshingChange={setMarketRefreshing} refreshKey={marketRefresh} />}
         {activePage === 'releases' && <ReleasesPage releases={releases} />}
         {activePage === 'users' && <UsersPage onUpdate={updateUser} users={users} />}
         {activePage === 'admins' && <AdminUsersPage currentAdminId={currentUser.id} onUpdate={updateAdminUser} admins={adminUsers} />}
@@ -648,6 +693,13 @@ function ReleaseMenuIcon() {
 function CostMenuIcon() {
   return <MenuIconFrame>
     <path d="M9 3.8v10.4M6.4 6.2c.7-1 2-1.6 3.4-1.6 2 0 3.2 1 3.2 2.4s-1.2 2.2-3.4 2.6c-2.1.4-3.4 1.2-3.4 2.6s1.3 2.5 3.5 2.5c1.5 0 2.8-.6 3.5-1.7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+  </MenuIconFrame>
+}
+
+function MarketMenuIcon() {
+  return <MenuIconFrame>
+    <path d="M3.5 13.5 6.5 8l3 4 2-3 3 4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+    <path d="M3.5 4.5v9h11" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
   </MenuIconFrame>
 }
 
@@ -775,6 +827,152 @@ function CostPage({ onError, refreshKey }: { onError: (message: string | null) =
     </section>
   </div>
 }
+
+function MarketPage({
+  refreshKey,
+  onRefreshingChange,
+}: {
+  refreshKey: number
+  onRefreshingChange: (refreshing: boolean) => void
+}) {
+  const [data, setData] = useState<MarketSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<MarketSortKey>('pct')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [query, setQuery] = useState('')
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<number | null>(null)
+  const firstLoad = useRef(true)
+  const showToast = (message: string, duration = 2500) => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    setToast(message)
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null)
+      toastTimer.current = null
+    }, duration)
+  }
+  const notifyRefreshing = (refreshing: boolean) => onRefreshingChange(refreshing)
+
+  useEffect(() => {
+    let cancelled = false
+    const isRefresh = !firstLoad.current
+    firstLoad.current = false
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      if (isRefresh) {
+        notifyRefreshing(true)
+        showToast('正在刷新行情数据…', 60000)
+      }
+      try {
+        const response = await fetch(`${API_BASE}/admin/market-indices${isRefresh ? '?refresh=true' : ''}`, { credentials: 'include' })
+        const payload = await readResponse(response)
+        if (!response.ok) throw new Error(apiError(payload, '读取行情数据失败'))
+        if (!cancelled) {
+          setData(payload as MarketSnapshot)
+          if (isRefresh) showToast((payload as MarketSnapshot).from_cache ? '已是最新数据，无需刷新' : '刷新完成')
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setError(requestError instanceof Error ? requestError.message : '读取行情数据失败')
+          if (isRefresh) showToast('刷新失败，请稍后重试')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+          notifyRefreshing(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+      notifyRefreshing(false)
+      if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    }
+  }, [refreshKey])
+
+  const toggleSort = (key: MarketSortKey) => {
+    if (sortKey === key) setSortDir((current) => current === 'desc' ? 'asc' : 'desc')
+    else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const rows = useMemo(() => {
+    if (!data) return []
+    let list = [...data.rest]
+    if (query.trim()) {
+      const needle = query.trim().toLowerCase()
+      list = list.filter((item) => item.name.toLowerCase().includes(needle) || item.secid.includes(needle))
+    }
+    const direction = sortDir === 'desc' ? -1 : 1
+    return list.sort((left, right) => (left[sortKey] - right[sortKey]) * direction)
+  }, [data, sortKey, sortDir, query])
+
+  if (loading && !data) return <div className="page-loading">正在拉取东方财富行情…</div>
+  if (error && !data) return <div className="page-error" role="alert">{error}</div>
+  if (!data) return null
+
+  const pctColor = (pct: number) => pct > 0.05 ? 'var(--market-up, #ff4d4f)' : pct < -0.05 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
+  const flowColor = (value: number) => value > 0 ? 'var(--market-up, #ff4d4f)' : value < 0 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
+  const sortMark = (key: MarketSortKey) => sortKey === key ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''
+  const typeLabel = (type: string) => type === 'industry' ? '行业' : type === 'concept' ? '概念' : type === 'etf' ? 'ETF' : '板块'
+
+  return <div className="market-page">
+    {toast && <div className={`market-toast${toast.includes('正在刷新') ? ' market-toast-loading' : ''}`}>{toast.includes('正在刷新') ? '↻ ' : ''}{toast}</div>}
+    <section className="privacy-banner">
+      <span>📈</span>
+      <div>
+        <strong>指数 / 板块 / ETF 行情快照</strong>
+        <p>{data.date} · {data.pinned.length} 个大盘指数 + {data.board_count} 个行业板块 + {data.etf_count} 个ETF · 数据来源：东方财富</p>
+      </div>
+    </section>
+    <section className="market-pinned">
+      {data.pinned.map((item) => (
+        <article className="market-pinned-card" key={item.secid} style={{ borderColor: pctColor(item.pct) }}>
+          <div className="market-pinned-header"><strong>{item.name}</strong><small>{item.secid}</small></div>
+          <div className="market-pinned-price">{item.price.toFixed(2)}</div>
+          <div className="market-pinned-pct" style={{ color: pctColor(item.pct) }}>{item.pct > 0 ? '+' : ''}{item.pct.toFixed(2)}% <small>{item.change > 0 ? '+' : ''}{item.change.toFixed(2)}</small></div>
+          {item.main_net_yi !== 0 && <div className="market-pinned-flow" style={{ color: flowColor(item.main_net_yi) }}>主力 {item.main_net_yi > 0 ? '+' : ''}{item.main_net_yi.toFixed(2)}亿</div>}
+          {item.up_count + item.down_count > 0 && <div className="market-pinned-breadth"><span style={{ color: 'var(--market-up, #ff4d4f)' }}>↑{item.up_count}</span><span style={{ color: 'var(--market-flat, #8c8c8c)' }}>—{item.flat_count}</span><span style={{ color: 'var(--market-down, #52c41a)' }}>↓{item.down_count}</span></div>}
+        </article>
+      ))}
+    </section>
+    <section className="panel market-rest-panel">
+      <div className="panel-heading">
+        <div><span>行业 · 概念 · ETF</span><h2>全量板块</h2></div>
+        <div className="market-toolbar">
+          <input aria-label="搜索板块" onChange={(event) => setQuery(event.target.value)} placeholder="搜索行业/概念/ETF…" value={query} />
+          <small>{rows.length} / {data.rest.length}</small>
+        </div>
+      </div>
+      <div className="market-rest-table">
+        <div className="market-rest-head">
+          <span>名称</span>
+          <span>类型</span>
+          <span>最新价</span>
+          <span className="market-sortable" onClick={() => toggleSort('pct')}>涨跌幅{sortMark('pct')}</span>
+          <span className="market-sortable" onClick={() => toggleSort('main_net_yi')}>主力净流入{sortMark('main_net_yi')}</span>
+          <span className="market-sortable" onClick={() => toggleSort('amount_yi')}>成交额(亿){sortMark('amount_yi')}</span>
+        </div>
+        {rows.map((item) => (
+          <div className="market-rest-row" key={item.secid}>
+            <span className="market-rest-name"><strong>{item.name}</strong></span>
+            <span className="market-rest-type">{typeLabel(item.type)}</span>
+            <span>{item.price.toFixed(item.type === 'etf' ? 3 : 2)}</span>
+            <span style={{ color: pctColor(item.pct), fontWeight: 600 }}>{item.pct > 0 ? '+' : ''}{item.pct.toFixed(2)}%</span>
+            <span style={{ color: flowColor(item.main_net_yi), fontWeight: 600 }}>{item.main_net_yi > 0 ? '+' : ''}{item.main_net_yi.toFixed(2)}</span>
+            <span>{item.amount_yi > 0 ? item.amount_yi.toFixed(2) : '—'}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+    <div className="market-footer"><small>生成时间 {data.generated_at} · 数据延迟约 15 秒 · 仅供个人参考，不构成投资建议</small></div>
+  </div>
+}
+
 function RoleRow({ label, count, tone }: { label: string; count: number; tone: string }) { return <div><i className={tone} /><span>{label}</span><strong>{count}</strong></div> }
 
 function UsersPage({ users, onUpdate }: { users: ManagedUser[]; onUpdate: (user: ManagedUser, role: Role, active: boolean) => void }) {

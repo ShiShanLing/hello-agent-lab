@@ -12,10 +12,12 @@ import type { GoalPlan } from './PlanCard'
 import { TravelPlanCard } from './TravelPlanCard'
 import type { TravelPlan, TravelWorkflow } from './TravelPlanCard'
 import { consumeSafeNextRedirect } from './postLoginRedirect'
-import { MetricsDashboard } from './MetricsDashboard'
 
 const WorkflowStudio = lazy(() =>
   import('./WorkflowStudio').then((module) => ({ default: module.WorkflowStudio })),
+)
+const MetricsDashboard = lazy(() =>
+  import('./MetricsDashboard').then((module) => ({ default: module.MetricsDashboard })),
 )
 
 type ChatMessage = {
@@ -3444,7 +3446,9 @@ function App() {
         )}
 
         {isMetricsOpen && (
-          <MetricsDashboard apiBaseUrl={API_BASE_URL} onClose={() => setIsMetricsOpen(false)} />
+          <Suspense fallback={<div className="workflow-loading">正在加载监控看板…</div>}>
+            <MetricsDashboard apiBaseUrl={API_BASE_URL} onClose={() => setIsMetricsOpen(false)} />
+          </Suspense>
         )}
 
         {isObservabilityOpen && (
