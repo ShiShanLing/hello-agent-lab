@@ -1,0 +1,25 @@
+{
+  "updatedAt": "2026-09-03",
+  "modules": [
+    {
+      "id": "agent",
+      "title": "Agent",
+      "url": "https://shishanling.cn/agent/"
+    },
+    {
+      "id": "todo",
+      "title": "Todo",
+      "url": "https://shishanling.cn/agent/todo/"
+    },
+    {
+      "id": "admin",
+      "title": "Admin",
+      "url": "https://shishanling.cn/agent/admin/"
+    },
+    {
+      "id": "workshop",
+      "title": "工坊",
+      "url": "https://shishanling.cn/workshop/"
+    }
+  ]
+}

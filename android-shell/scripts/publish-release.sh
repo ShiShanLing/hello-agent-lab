@@ -50,31 +50,31 @@ else
         --target master --title "服务器项目 $VERSION_NAME" --notes "$RELEASE_NOTES"
 fi
 
-python3 - "$STAGING/version.json" "$VERSION_CODE" "$VERSION_NAME" "$APK_URL" "$RELEASE_NOTES" <<'PY'
+python3 - "$STAGING/version.json" "$VERSION_CODE" "$VERSION_NAME" "$APK_URL" "$RELEASE_NOTES" "$ROOT/config/modules.json" <<'PY'
 import json
 import sys
 
-path, version_code, version_name, apk_url, release_notes = sys.argv[1:]
+path, version_code, version_name, apk_url, release_notes, modules_path = sys.argv[1:]
+with open(modules_path, encoding="utf-8") as handle:
+    modules_document = json.load(handle)
+payload = {
+    "versionCode": int(version_code),
+    "versionName": version_name,
+    "apkUrl": apk_url,
+    "forceUpdate": False,
+    "releaseNotes": release_notes.strip(),
+    "modules": modules_document["modules"],
+}
 with open(path, "w", encoding="utf-8") as handle:
-    json.dump(
-        {
-            "versionCode": int(version_code),
-            "versionName": version_name,
-            "apkUrl": apk_url,
-            "forceUpdate": False,
-            "releaseNotes": release_notes.strip(),
-        },
-        handle,
-        ensure_ascii=False,
-        indent=2,
-    )
+    json.dump(payload, handle, ensure_ascii=False, indent=2)
     handle.write("\n")
 PY
 
-scp -q "$STAGING/version.json" "$HOST:$REMOTE_DIR/version.json"
-ssh "$HOST" "chmod 644 '$REMOTE_DIR/version.json'"
+scp -q "$STAGING/version.json" "$ROOT/config/modules.json" "$HOST:$REMOTE_DIR/"
+ssh "$HOST" "chmod 644 '$REMOTE_DIR/version.json' '$REMOTE_DIR/modules.json'"
 curl --fail --silent --show-error "$VERSION_URL" >/dev/null
 
 echo "已发布服务器项目 $VERSION_NAME（versionCode $VERSION_CODE）"
 echo "  GitHub APK: $APK_URL"
 echo "  更新清单: $VERSION_URL"
+echo "  入口配置: $REMOTE_DIR/modules.json（写入 version.json.modules，现有 Nginx 即可读取）"

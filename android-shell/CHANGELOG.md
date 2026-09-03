@@ -1,5 +1,11 @@
 # 服务器项目 Android 客户端更新记录
 
+## [0.1.2] - 2026-09-03（versionCode 3）
+
+- 第四个入口改为工坊 `https://shishanling.cn/workshop/`。
+- 入口地址改为读取服务器配置（`modules.json`，并写入 `version.json` 的 `modules`）。
+- 之后只改服务器配置即可调整地址，不必再为改链接打 APK。
+
 ## [0.1.1] - 2026-08-31（versionCode 2）
 
 - 所有内置入口统一改用 `https://shishanling.cn`。

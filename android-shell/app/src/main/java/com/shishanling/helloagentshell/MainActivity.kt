@@ -55,6 +55,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         configureWindowInsets()
+        ModuleRegistry.restore(this)
+        currentModule = ModuleRegistry.agent
         configureToolbar()
         configureDrawer()
         configureWebView()
@@ -67,6 +69,7 @@ class MainActivity : AppCompatActivity() {
             setToolbarTitle(currentModule.title)
         }
 
+        refreshShellConfig()
         binding.root.postDelayed({ checkForUpdates(userInitiated = false) }, UPDATE_CHECK_DELAY_MS)
     }
 
@@ -185,6 +188,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configureDrawer() {
+        applyDrawerTitles()
         binding.navigationView.setCheckedItem(currentModule.menuId)
         binding.navigationView.setNavigationItemSelectedListener(
             NavigationView.OnNavigationItemSelectedListener { item ->
@@ -197,6 +201,33 @@ class MainActivity : AppCompatActivity() {
         binding.retryButton.setOnClickListener {
             hideError()
             binding.webView.reload()
+        }
+    }
+
+    private fun applyDrawerTitles() {
+        val menu = binding.navigationView.menu
+        ModuleRegistry.all.forEach { module ->
+            menu.findItem(module.menuId)?.title = module.title
+        }
+    }
+
+    private fun refreshShellConfig() {
+        updateExecutor.execute {
+            val json = runCatching { ShellConfigClient().fetch() }.getOrNull() ?: return@execute
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val previousUrl = currentModule.url
+                if (!ModuleRegistry.applyRemoteJson(json)) return@runOnUiThread
+                ModuleRegistry.persist(this, json)
+                applyDrawerTitles()
+                val updated = ModuleRegistry.byMenuId(currentModule.menuId)
+                currentModule = updated
+                setToolbarTitle(updated.title)
+                binding.navigationView.setCheckedItem(updated.menuId)
+                if (updated.url != previousUrl) {
+                    openModule(updated, forceReload = true)
+                }
+            }
         }
     }
 

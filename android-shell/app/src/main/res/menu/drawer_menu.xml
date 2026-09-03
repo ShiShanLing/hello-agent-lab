@@ -14,8 +14,8 @@
             android:icon="@android:drawable/ic_lock_lock"
             android:title="@string/module_admin" />
         <item
-            android:id="@+id/nav_angular20"
+            android:id="@+id/nav_workshop"
             android:icon="@android:drawable/ic_menu_view"
-            android:title="@string/module_angular20" />
+            android:title="@string/module_workshop" />
     </group>
 </menu>

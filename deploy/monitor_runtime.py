@@ -34,7 +34,7 @@ DEFAULT_SERVICES = (
     "bcm-agent",
 )
 DEFAULT_URLS = (
-    "https://shishanling.cn/angular20/",
+    "https://shishanling.cn/workshop/",
     "https://shishanling.cn/agent/",
     "https://shishanling.cn/agent/todo/",
     "https://shishanling.cn/agent/admin/",

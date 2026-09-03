@@ -8,7 +8,7 @@ STATUS_FILE="$OPS_STATE/external-monitor-status.txt"
 SIGNATURE_FILE="$OPS_STATE/external-monitor-signature"
 FAILURES=""
 URLS=(
-  "https://shishanling.cn/angular20/"
+  "https://shishanling.cn/workshop/"
   "https://shishanling.cn/agent/"
   "https://shishanling.cn/agent/todo/"
   "https://shishanling.cn/agent/admin/"

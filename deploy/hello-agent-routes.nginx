@@ -29,6 +29,13 @@ location = /hello-agent-app/version.json {
     add_header Access-Control-Allow-Origin * always;
 }
 
+location = /hello-agent-app/modules.json {
+    alias /var/www/hello-agent-app/modules.json;
+    default_type application/json;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Access-Control-Allow-Origin * always;
+}
+
 location ^~ /jbd-bms/ {
     if ($http_user_agent ~* "^JbdBmsManager/0\.[0-4](\.|$)") { return 410; }
     alias /var/www/jbd-bms/;

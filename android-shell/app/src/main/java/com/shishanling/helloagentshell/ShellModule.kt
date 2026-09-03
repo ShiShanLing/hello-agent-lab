@@ -5,4 +5,5 @@ data class ShellModule(
     val title: String,
     val url: String,
     val host: String?,
+    val id: String = "",
 )

@@ -1,34 +1,48 @@
 # Hello Agent Android Shell
 
-这是一个原生 Android 壳工程，用单个 `WebView` 聚合以下模块：
+这是一个原生 Android 壳工程，用单个 `WebView` 聚合服务器上的站点入口。默认内置：
 
 - `Agent`: `/agent/`
 - `Todo`: `/agent/todo/`
 - `Admin`: `/agent/admin/`
-- `Angular20`: `/angular20/`
+- `工坊`: `/workshop/`
+
+启动后会拉取服务器配置覆盖上述地址，并缓存到本地。以后改链接只更新服务器 JSON，不必重发 APK。
 
 ## 目录
 
 - `app/src/main/java/com/shishanling/helloagentshell/MainActivity.kt`
-  - 抽屉菜单、单 `WebView`、返回键、异常页、外链跳浏览器
+  - 抽屉菜单、单 `WebView`、返回键、异常页、外链跳浏览器、拉取入口配置
 - `app/src/main/java/com/shishanling/helloagentshell/ModuleRegistry.kt`
-  - 四个模块的标题、URL、域名白名单
+  - 模块标题、URL、域名白名单，支持远程配置覆盖
+- `config/modules.json`
+  - 服务器入口配置源文件
 - `app/src/main/res/layout/activity_main.xml`
   - `DrawerLayout + Toolbar + WebView + Loading/Error Overlay`
 
-## URL 配置
+## 入口配置
 
-在 `gradle.properties` 中修改：
+源文件：`android-shell/config/modules.json`
+
+生产读取顺序：
+
+1. `https://shishanling.cn/hello-agent-app/modules.json`（需 Nginx 单独放行；当前仓库已写好 location）
+2. `https://shishanling.cn/hello-agent-app/version.json` 里的 `modules` 字段（现有 Nginx 已能访问）
+
+只允许 `https://shishanling.cn/...`。拉取失败时使用 APK 内置默认地址（工坊为 `/workshop/`）。
+
+只改入口、不打 APK：
+
+```bash
+./android-shell/scripts/publish-modules.sh
+```
+
+兜底域名仍可在 `gradle.properties` 修改：
 
 ```properties
 helloAgentBaseUrl=https://shishanling.cn
-angular20Url=https://shishanling.cn/angular20/
+workshopUrl=https://shishanling.cn/workshop/
 ```
-
-构建时会生成：
-
-- `BuildConfig.HELLO_AGENT_BASE_URL`
-- `BuildConfig.ANGULAR20_URL`
 
 ## 构建
 
@@ -58,7 +72,7 @@ android-shell/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 脚本会运行单元测试、构建 APK、创建或更新 GitHub Release，并把 `version.json`
-上传到服务器 `/var/www/hello-agent-app/version.json`。
+与 `modules.json` 上传到服务器 `/var/www/hello-agent-app/`。
 
 ## 登录态说明
 
@@ -77,7 +91,7 @@ android-shell/app/build/outputs/apk/debug/app-debug.apk
 
 - `Agent` 与 `Todo` 应尽量复用登录态
 - `Admin` 仍使用独立后台认证，但登录后可在壳内持续保持
-- `Angular20` 若不是同域，需要按其自身站点策略单独验证
+- `工坊` 若同域可保留登录；若路径或站点策略变更，改服务器配置即可
 
 ## 当前已处理
 
@@ -87,10 +101,11 @@ android-shell/app/build/outputs/apk/debug/app-debug.apk
 - 外链跳系统浏览器
 - 下载转浏览器继续
 - 文件上传先给提示，后续二期补原生文件选择器
+- 入口地址远程配置
 
 ## 建议真机验证
 
 1. `Agent -> Todo` 是否无需重复登录
 2. `Admin` 登录一次后再次进入是否保持
-3. `Angular20` 是否同域、是否能保留登录
+3. `工坊` 是否能打开 `https://shishanling.cn/workshop/`
 4. 文件上传、下载、剪贴板、支付/第三方登录等是否有额外限制
