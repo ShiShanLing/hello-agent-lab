@@ -127,7 +127,7 @@ cd admin-frontend && npm run build
 
 `--targets` 必须显式给出，可选 `frontend`、`todo`、`admin`、`backend`、`knowledge`、`skills`。脚本会运行测试、检查 `dist/index.html` 资源前缀、备份 SQLite、检查 Redis 持久化、快照当前版本，再同步并验收四个生产地址。失败会回滚并写入 `/var/lib/hello-agent/releases/`。主站 `--delete` 仍必须排除 `admin/` 和 `todo/`，脚本已内置该检查。
 
-**发布到服务器时，必须同时把对应源码提交并推到 GitHub。** 禁止只更新生产、把改动留在本机工作区。GitHub 与生产落后，是上次行情页丢失的原因。不要提交 `.env`、密钥、数据库、上传文件、缓存或 `dist/`。
+**发布到服务器时，必须把对应源码提交并推到 GitHub，作为同一套流程一次做完。** 用户说「提交」就包含 `git push`，禁止只 commit 完再停下来问。不要提交 `.env`、密钥、数据库、上传文件、缓存或 `dist/`。
 
 ## 发布前检查
 
