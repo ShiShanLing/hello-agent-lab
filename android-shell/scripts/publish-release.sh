@@ -74,7 +74,7 @@ scp -q "$STAGING/version.json" "$ROOT/config/modules.json" "$HOST:$REMOTE_DIR/"
 ssh "$HOST" "chmod 644 '$REMOTE_DIR/version.json' '$REMOTE_DIR/modules.json'"
 curl --fail --silent --show-error "$VERSION_URL" >/dev/null
 
-echo "已发布服务器项目 $VERSION_NAME（versionCode $VERSION_CODE）"
+echo "已发布服务器项目 ${VERSION_NAME}（versionCode ${VERSION_CODE}）"
 echo "  GitHub APK: $APK_URL"
 echo "  更新清单: $VERSION_URL"
 echo "  入口配置: $REMOTE_DIR/modules.json（写入 version.json.modules，现有 Nginx 即可读取）"
