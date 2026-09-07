@@ -256,7 +256,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, true)
+            // 各站点已经提供自己的明暗主题，避免 WebView 在系统深色模式下再次压暗浅色页面。
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, false)
         }
 
         binding.webView.webChromeClient = object : WebChromeClient() {
