@@ -12,6 +12,9 @@ data/agent.db-wal
 data/knowledge_uploads/
 .deploy-releases/
 
-.cursor/
+.cursor/*
+!.cursor/rules/
+.cursor/rules/*
+!.cursor/rules/*.mdc
 artifacts/
 hello-agent/

@@ -1,0 +1,33 @@
+---
+description: 完成大功能后自动按 AGENTS.md 发布到生产，不要等用户再提醒一次
+alwaysApply: true
+---
+
+# 大功能自动发布
+
+完成一项新的大功能后，不要停在本地实现；在测试和必要构建通过后，立即按 `AGENTS.md` 发布受影响的部分。
+
+大功能指新模块或新能力，例如 Skills、MCP、评测、工作流节点、监控看板、认证/权限，而不是单纯改间距、文案或注释。
+
+## 必须遵守
+
+- 只发布本次改动涉及的应用：主站、Todo、管理后台、后端、`knowledge/`、`skills/` 不要默认全发。
+- 主站 `rsync --delete` 必须排除 `admin/` 和 `todo/`。目标不得是 `/var/www/projects/agent/` 的无排除删除，也不得是 `/var/www/projects/`。
+- 后端同步到 `/opt/hello-agent/`，不得删除 `.venv`、知识目录、`/etc/hello-agent.env`、`/var/lib/hello-agent/`。
+- 不覆盖运行时数据：数据库、上传文件、Redis、服务器密钥。
+- SSH 主机使用已配置的 `baidu-bcc`。
+
+## 提交、推送、发布一次做完
+
+用户说「提交」就是 `git commit` + `git push`，不要只 commit 完再问要不要推。只要发到服务器，顺序是：测试通过 → commit → push → 发布。禁止走一步停一步。不要问“要不要提交/推送/发布”，做完后直接回报 commit、远程和验收结果。
+
+- 提交内容与本次发布一致：该进仓库的源码、测试、配置都进；不要提交 `.env`、密钥、数据库、上传文件、缓存、`dist/`、服务器日志。
+- 推到当前跟踪的远程分支（通常是 `origin/master`）。
+- 若提交或 push 失败，先修好再发布；已经误发上去的，补提交补 push，不要让 GitHub 落后于生产。
+
+## 发布后
+
+- 检查主站、Todo、管理后台、`/agent/api/health` 均为 200。
+- 主站发布后确认 `todo/index.html` 和 `admin/index.html` 仍在。
+- `hello-agent` 若因 SSE 停在 deactivating，使用 `systemctl kill -s SIGKILL` 后 `start`，再验健康检查。
+- 向用户回报发布了哪些部分、验收结果、commit 和远程是否已更新，不要再问“要不要发布”。
