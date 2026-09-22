@@ -17,9 +17,15 @@ from checks import (  # noqa: E402
     sibling_index_paths,
     snapshot_marker,
 )
+from publish import DEFAULT_PUBLIC_BASE, RESTART_BACKEND_COMMAND  # noqa: E402
 
 
 class DeployChecksTest(unittest.TestCase):
+    def test_publish_defaults_to_https_and_uses_authorized_service_restart(self) -> None:
+        self.assertEqual(DEFAULT_PUBLIC_BASE, "https://shishanling.cn")
+        self.assertIn("sudo -n /usr/bin/systemctl", RESTART_BACKEND_COMMAND)
+        self.assertIn("hello-agent.service", RESTART_BACKEND_COMMAND)
+
     def test_rejects_unprotected_delete_of_agent_parent(self) -> None:
         with self.assertRaises(DeployCheckError):
             rsync_is_safe("/var/www/projects/agent/", delete=True)

@@ -28,7 +28,7 @@ from checks import (  # noqa: E402
 )
 
 DEFAULT_HOST = os.environ.get("DEPLOY_SSH_HOST", "baidu-bcc")
-DEFAULT_PUBLIC_BASE = os.environ.get("DEPLOY_PUBLIC_BASE", "http://106.13.175.227")
+DEFAULT_PUBLIC_BASE = os.environ.get("DEPLOY_PUBLIC_BASE", "https://shishanling.cn")
 REMOTE_AGENT_ROOT = os.environ.get("DEPLOY_REMOTE_AGENT_ROOT", "/var/www/projects/agent")
 REMOTE_BACKEND = os.environ.get("DEPLOY_REMOTE_BACKEND", "/opt/hello-agent")
 REMOTE_DATA = os.environ.get("DEPLOY_REMOTE_DATA", "/var/lib/hello-agent")
@@ -41,6 +41,12 @@ FRONTEND_APPS = {
     "todo": ROOT / "todo-frontend",
     "admin": ROOT / "admin-frontend",
 }
+RESTART_BACKEND_COMMAND = (
+    "sudo -n /usr/bin/systemctl kill -s SIGKILL hello-agent.service || true; "
+    "sudo -n /usr/bin/systemctl start hello-agent.service; "
+    "sudo -n /usr/bin/systemctl restart hello-agent-worker.service || true; "
+    "sudo -n /usr/bin/systemctl restart hello-agent-scheduler.service || true"
+)
 
 
 class PublishError(RuntimeError):
@@ -303,9 +309,7 @@ def restart_backend(host: str) -> None:
     log("重启 hello-agent（SIGKILL 避免 SSE 卡住）")
     ssh(
         host,
-        "systemctl kill -s SIGKILL hello-agent || true; systemctl start hello-agent; "
-        "systemctl restart hello-agent-worker || true; "
-        "systemctl restart hello-agent-scheduler || true",
+        RESTART_BACKEND_COMMAND,
         capture=False,
     )
     for attempt in range(20):
