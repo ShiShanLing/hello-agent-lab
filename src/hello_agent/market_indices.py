@@ -1,4 +1,4 @@
-"""东方财富指数/板块/ETF 实时行情快照（管理后台专用）。"""
+"""东方财富国内外指数、板块与 ETF 实时行情快照（管理后台专用）。"""
 
 from __future__ import annotations
 
@@ -45,6 +45,22 @@ PINNED_INDICES = [
     {"name": "创业板指", "secid": "0.399006"},
     {"name": "科创50", "secid": "1.000688"},
     {"name": "沪深300", "secid": "1.000300"},
+]
+
+# ── 全球主要指数（指数本身，不使用 ETF 代替） ──
+GLOBAL_INDICES = [
+    {"name": "恒生指数", "secid": "100.HSI"},
+    {"name": "恒生科技指数", "secid": "124.HSTECH"},
+    {"name": "国企指数", "secid": "100.HSCEI"},
+    {"name": "纳斯达克", "secid": "100.NDX"},
+    {"name": "道琼斯", "secid": "100.DJIA"},
+    {"name": "标普500", "secid": "100.SPX"},
+    {"name": "纳斯达克中国金龙指数", "secid": "251.HXC"},
+    {"name": "日经225", "secid": "100.N225"},
+    {"name": "英国富时100", "secid": "100.FTSE"},
+    {"name": "法国CAC40", "secid": "100.FCHI"},
+    {"name": "德国DAX30", "secid": "100.GDAXI"},
+    {"name": "欧洲斯托克50", "secid": "100.SX5E"},
 ]
 
 # ── 关注的 ETF ──
@@ -152,7 +168,9 @@ def _parse_history_baseline(klines: Any) -> dict[str, Any] | None:
 
 
 async def _ulist_fetch(
-    client: httpx.AsyncClient, secids: list[str]
+    client: httpx.AsyncClient,
+    secids: list[str],
+    force_type: str | None = None,
 ) -> list[dict[str, Any]]:
     """ulist.np 接口拉取指数/ETF 行情。"""
     path = (
@@ -165,7 +183,7 @@ async def _ulist_fetch(
             data = resp.json()
             diff = (data.get("data") or {}).get("diff")
             if diff:
-                return _parse_diff(diff)
+                return _parse_diff(diff, force_type)
         except Exception as exc:
             logger.warning("东财 ulist 节点 %s 失败: %s", host, exc)
     raise RuntimeError("ulist 接口所有节点不可用")
@@ -202,7 +220,7 @@ async def _clist_fetch_all(
 
 
 async def fetch_market_indices() -> dict[str, Any]:
-    """拉取置顶指数 + 全量行业板块 + 全量概念板块 + ETF。"""
+    """拉取置顶指数 + 全球指数 + 全量行业/概念板块 + ETF。"""
     previous = load_cache()
     ulist_secids = [s["secid"] for s in PINNED_INDICES] + [
         s["secid"] for s in ETF_LIST
@@ -210,6 +228,11 @@ async def fetch_market_indices() -> dict[str, Any]:
 
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         index_quotes = await _ulist_fetch(client, ulist_secids)
+        global_quotes = await _ulist_fetch(
+            client,
+            [spec["secid"] for spec in GLOBAL_INDICES],
+            force_type="global",
+        )
         await asyncio.sleep(0.5 + random.random() * 0.5)
         industry_quotes = await _clist_fetch_all(
             client, "m%3A90+t%3A2", "industry"
@@ -239,7 +262,12 @@ async def fetch_market_indices() -> dict[str, Any]:
             boards.append(q)
     boards.sort(key=lambda q: q["pct"], reverse=True)
 
-    rest = boards + etf
+    global_indices = sorted(
+        global_quotes,
+        key=lambda q: q["pct"],
+        reverse=True,
+    )
+    rest = global_indices + boards + etf
 
     now = datetime.now(timezone(timedelta(hours=8)))
     quotes = pinned + rest
@@ -261,6 +289,7 @@ async def fetch_market_indices() -> dict[str, Any]:
         "count": len(pinned) + len(rest),
         "pinned": pinned,
         "rest": rest,
+        "global_count": len(global_indices),
         "board_count": len(boards),
         "etf_count": len(etf),
     }
@@ -291,7 +320,7 @@ def load_cache() -> dict[str, Any] | None:
 
 
 def cache_has_comparisons(cached: dict[str, Any] | None) -> bool:
-    if not cached:
+    if not cached or "global_count" not in cached:
         return False
     quotes = [*cached.get("pinned", []), *cached.get("rest", [])]
     return bool(quotes) and all(

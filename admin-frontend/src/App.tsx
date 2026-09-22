@@ -135,6 +135,7 @@ type MarketSnapshot = {
   generated_at: string
   pinned: MarketQuote[]
   rest: MarketQuote[]
+  global_count: number
   board_count: number
   etf_count: number
   from_cache?: boolean
@@ -958,15 +959,15 @@ function MarketPage({
   const flowColor = (value: number) => value > 0 ? 'var(--market-up, #ff4d4f)' : value < 0 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
   const comparisonText = (value: number | null) => value == null ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
   const sortMark = (key: MarketSortKey) => sortKey === key ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ' ↕'
-  const typeLabel = (type: string) => type === 'industry' ? '行业' : type === 'concept' ? '概念' : type === 'etf' ? 'ETF' : '板块'
+  const typeLabel = (type: string) => type === 'global' ? '全球' : type === 'industry' ? '行业' : type === 'concept' ? '概念' : type === 'etf' ? 'ETF' : '板块'
 
   return <div className="market-page">
     {toast && <div className={`market-toast${toast.includes('正在刷新') ? ' market-toast-loading' : ''}`}>{toast.includes('正在刷新') ? '↻ ' : ''}{toast}</div>}
     <section className="privacy-banner">
       <span>📈</span>
       <div>
-        <strong>指数 / 板块 / ETF 行情快照</strong>
-        <p>{data.date} · {data.pinned.length} 个大盘指数 + {data.board_count} 个行业板块 + {data.etf_count} 个ETF · 数据来源：东方财富</p>
+        <strong>A股 / 全球指数 / 板块 / ETF 行情快照</strong>
+        <p>{data.date} · {data.pinned.length} 个A股指数 + {data.global_count} 个全球指数 + {data.board_count} 个行业板块 + {data.etf_count} 个ETF · 数据来源：东方财富</p>
       </div>
     </section>
     {(!favoritesOnly || pinnedRows.length > 0) && <section className="market-pinned">
@@ -986,9 +987,9 @@ function MarketPage({
     </section>}
     <section className="panel market-rest-panel">
       <div className="panel-heading">
-        <div><span>行业 · 概念 · ETF</span><h2>全量板块</h2></div>
+        <div><span>全球指数 · 行业 · 概念 · ETF</span><h2>全球指数与全量板块</h2></div>
         <div className="market-toolbar">
-          <input aria-label="搜索板块" onChange={(event) => setQuery(event.target.value)} placeholder="搜索行业/概念/ETF…" value={query} />
+          <input aria-label="搜索行情" onChange={(event) => setQuery(event.target.value)} placeholder="搜索指数/行业/概念/ETF…" value={query} />
           <button className={`market-favorites-filter${favoritesOnly ? ' active' : ''}`} onClick={() => setFavoritesOnly((current) => !current)} title="快捷筛选已收藏项目" type="button">★ 只看收藏 <b>{favorites.size}</b></button>
           <small>{rows.length} / {data.rest.length}</small>
         </div>

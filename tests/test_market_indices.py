@@ -33,6 +33,7 @@ _SAMPLE = {
     "count": 1,
     "pinned": [{"name": "上证指数", "secid": "1.000001", "pct": 0.5, "refresh_pct": 0.1, "month_pct": 2.5}],
     "rest": [],
+    "global_count": 0,
     "board_count": 0,
     "etf_count": 0,
 }
@@ -48,6 +49,10 @@ class MarketIndexParseTest(unittest.TestCase):
         self.assertEqual(index["direction"], "涨")
         self.assertEqual(_classify("90.880505"), "board")
         self.assertEqual(_classify("1.512480"), "etf")
+        self.assertEqual(
+            _parse_row({"f12": "N225", "f13": 100, "f14": "日经225"}, "global")["type"],
+            "global",
+        )
         self.assertEqual(_direction_label(-1.2)["direction"], "跌")
         self.assertEqual(_direction_label(0.01)["direction"], "平")
 
@@ -71,6 +76,11 @@ class MarketIndexParseTest(unittest.TestCase):
 class MarketIndexCachePolicyTest(unittest.TestCase):
     def test_legacy_cache_without_comparisons_requires_refresh(self) -> None:
         legacy = {**_SAMPLE, "pinned": [{"secid": "1.000001", "price": 4000}]}
+        self.assertFalse(cache_has_comparisons(legacy))
+        self.assertTrue(should_fetch(legacy))
+
+    def test_cache_without_global_indices_requires_refresh(self) -> None:
+        legacy = {key: value for key, value in _SAMPLE.items() if key != "global_count"}
         self.assertFalse(cache_has_comparisons(legacy))
         self.assertTrue(should_fetch(legacy))
 
