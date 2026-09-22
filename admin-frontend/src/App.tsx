@@ -141,6 +141,7 @@ type MarketSnapshot = {
 }
 
 type MarketSortKey = 'pct' | 'refresh_pct' | 'month_pct' | 'main_net_yi' | 'amount_yi'
+const MARKET_FAVORITES_KEY = 'hello-agent-admin-market-favorites-v1'
 
 type CostPeriod = 'day' | 'week' | 'month'
 
@@ -844,6 +845,15 @@ function MarketPage({
   const [sortKey, setSortKey] = useState<MarketSortKey>('pct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [query, setQuery] = useState('')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(MARKET_FAVORITES_KEY) || '[]')
+      return new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : [])
+    } catch {
+      return new Set()
+    }
+  })
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | null>(null)
   const firstLoad = useRef(true)
@@ -895,6 +905,19 @@ function MarketPage({
     }
   }, [refreshKey])
 
+  useEffect(() => {
+    window.localStorage.setItem(MARKET_FAVORITES_KEY, JSON.stringify([...favorites]))
+  }, [favorites])
+
+  const toggleFavorite = (secid: string) => {
+    setFavorites((current) => {
+      const next = new Set(current)
+      if (next.has(secid)) next.delete(secid)
+      else next.add(secid)
+      return next
+    })
+  }
+
   const toggleSort = (key: MarketSortKey) => {
     if (sortKey === key) setSortDir((current) => current === 'desc' ? 'asc' : 'desc')
     else {
@@ -906,6 +929,7 @@ function MarketPage({
   const rows = useMemo(() => {
     if (!data) return []
     let list = [...data.rest]
+    if (favoritesOnly) list = list.filter((item) => favorites.has(item.secid))
     if (query.trim()) {
       const needle = query.trim().toLowerCase()
       list = list.filter((item) => item.name.toLowerCase().includes(needle) || item.secid.includes(needle))
@@ -919,7 +943,12 @@ function MarketPage({
       if (rightValue == null) return -1
       return (leftValue - rightValue) * direction
     })
-  }, [data, sortKey, sortDir, query])
+  }, [data, favorites, favoritesOnly, sortKey, sortDir, query])
+
+  const pinnedRows = useMemo(() => {
+    if (!data) return []
+    return favoritesOnly ? data.pinned.filter((item) => favorites.has(item.secid)) : data.pinned
+  }, [data, favorites, favoritesOnly])
 
   if (loading && !data) return <div className="page-loading">正在拉取东方财富行情…</div>
   if (error && !data) return <div className="page-error" role="alert">{error}</div>
@@ -928,7 +957,7 @@ function MarketPage({
   const pctColor = (pct: number) => pct > 0.05 ? 'var(--market-up, #ff4d4f)' : pct < -0.05 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
   const flowColor = (value: number) => value > 0 ? 'var(--market-up, #ff4d4f)' : value < 0 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
   const comparisonText = (value: number | null) => value == null ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
-  const sortMark = (key: MarketSortKey) => sortKey === key ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''
+  const sortMark = (key: MarketSortKey) => sortKey === key ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ' ↕'
   const typeLabel = (type: string) => type === 'industry' ? '行业' : type === 'concept' ? '概念' : type === 'etf' ? 'ETF' : '板块'
 
   return <div className="market-page">
@@ -940,10 +969,10 @@ function MarketPage({
         <p>{data.date} · {data.pinned.length} 个大盘指数 + {data.board_count} 个行业板块 + {data.etf_count} 个ETF · 数据来源：东方财富</p>
       </div>
     </section>
-    <section className="market-pinned">
-      {data.pinned.map((item) => (
+    {(!favoritesOnly || pinnedRows.length > 0) && <section className="market-pinned">
+      {pinnedRows.map((item) => (
         <article className="market-pinned-card" key={item.secid} style={{ borderColor: pctColor(item.pct) }}>
-          <div className="market-pinned-header"><strong>{item.name}</strong><small>{item.secid}</small></div>
+          <div className="market-pinned-header"><strong>{item.name}</strong><div><small>{item.secid}</small><button aria-label={`${favorites.has(item.secid) ? '取消收藏' : '收藏'}${item.name}`} className={`market-favorite-button${favorites.has(item.secid) ? ' is-favorite' : ''}`} onClick={() => toggleFavorite(item.secid)} title={favorites.has(item.secid) ? '取消收藏' : '收藏'} type="button">{favorites.has(item.secid) ? '★' : '☆'}</button></div></div>
           <div className="market-pinned-price">{item.price.toFixed(2)}</div>
           <div className="market-pinned-pct" style={{ color: pctColor(item.pct) }}>{item.pct > 0 ? '+' : ''}{item.pct.toFixed(2)}% <small>{item.change > 0 ? '+' : ''}{item.change.toFixed(2)}</small></div>
           <div className="market-pinned-comparisons">
@@ -954,12 +983,13 @@ function MarketPage({
           {item.up_count + item.down_count > 0 && <div className="market-pinned-breadth"><span style={{ color: 'var(--market-up, #ff4d4f)' }}>↑{item.up_count}</span><span style={{ color: 'var(--market-flat, #8c8c8c)' }}>—{item.flat_count}</span><span style={{ color: 'var(--market-down, #52c41a)' }}>↓{item.down_count}</span></div>}
         </article>
       ))}
-    </section>
+    </section>}
     <section className="panel market-rest-panel">
       <div className="panel-heading">
         <div><span>行业 · 概念 · ETF</span><h2>全量板块</h2></div>
         <div className="market-toolbar">
           <input aria-label="搜索板块" onChange={(event) => setQuery(event.target.value)} placeholder="搜索行业/概念/ETF…" value={query} />
+          <button className={`market-favorites-filter${favoritesOnly ? ' active' : ''}`} onClick={() => setFavoritesOnly((current) => !current)} title="快捷筛选已收藏项目" type="button">★ 只看收藏 <b>{favorites.size}</b></button>
           <small>{rows.length} / {data.rest.length}</small>
         </div>
       </div>
@@ -968,15 +998,15 @@ function MarketPage({
           <span>名称</span>
           <span>类型</span>
           <span>最新价</span>
-          <span className="market-sortable" onClick={() => toggleSort('pct')}>涨跌幅{sortMark('pct')}</span>
-          <span className="market-sortable" onClick={() => toggleSort('refresh_pct')}>较上次刷新{sortMark('refresh_pct')}</span>
-          <span className="market-sortable" onClick={() => toggleSort('month_pct')}>近一个月{sortMark('month_pct')}</span>
-          <span className="market-sortable" onClick={() => toggleSort('main_net_yi')}>主力净流入{sortMark('main_net_yi')}</span>
-          <span className="market-sortable" onClick={() => toggleSort('amount_yi')}>成交额(亿){sortMark('amount_yi')}</span>
+          <button className="market-sortable" onClick={() => toggleSort('pct')} title="点击切换升降序" type="button">涨跌幅{sortMark('pct')}</button>
+          <button className="market-sortable" onClick={() => toggleSort('refresh_pct')} title="点击切换升降序" type="button">较上次刷新{sortMark('refresh_pct')}</button>
+          <button className="market-sortable" onClick={() => toggleSort('month_pct')} title="点击切换升降序" type="button">近一个月{sortMark('month_pct')}</button>
+          <button className="market-sortable" onClick={() => toggleSort('main_net_yi')} title="点击切换升降序" type="button">主力净流入{sortMark('main_net_yi')}</button>
+          <button className="market-sortable" onClick={() => toggleSort('amount_yi')} title="点击切换升降序" type="button">成交额(亿){sortMark('amount_yi')}</button>
         </div>
-        {rows.map((item) => (
+        {rows.length === 0 ? <div className="market-empty-state">{favoritesOnly ? '还没有符合条件的收藏项目。点击名称旁的星星即可收藏。' : '没有找到匹配的行情。'}</div> : rows.map((item) => (
           <div className="market-rest-row" key={item.secid}>
-            <span className="market-rest-name"><strong>{item.name}</strong></span>
+            <span className="market-rest-name"><button aria-label={`${favorites.has(item.secid) ? '取消收藏' : '收藏'}${item.name}`} className={`market-favorite-button${favorites.has(item.secid) ? ' is-favorite' : ''}`} onClick={() => toggleFavorite(item.secid)} title={favorites.has(item.secid) ? '取消收藏' : '收藏'} type="button">{favorites.has(item.secid) ? '★' : '☆'}</button><strong>{item.name}</strong></span>
             <span className="market-rest-type">{typeLabel(item.type)}</span>
             <span>{item.price.toFixed(item.type === 'etf' ? 3 : 2)}</span>
             <span style={{ color: pctColor(item.pct), fontWeight: 600 }}>{item.pct > 0 ? '+' : ''}{item.pct.toFixed(2)}%</span>
