@@ -125,6 +125,9 @@ type MarketQuote = {
   up_count: number
   down_count: number
   flat_count: number
+  refresh_pct: number | null
+  month_pct: number | null
+  month_base_date: string | null
 }
 
 type MarketSnapshot = {
@@ -137,7 +140,7 @@ type MarketSnapshot = {
   from_cache?: boolean
 }
 
-type MarketSortKey = 'pct' | 'main_net_yi' | 'amount_yi'
+type MarketSortKey = 'pct' | 'refresh_pct' | 'month_pct' | 'main_net_yi' | 'amount_yi'
 
 type CostPeriod = 'day' | 'week' | 'month'
 
@@ -908,7 +911,14 @@ function MarketPage({
       list = list.filter((item) => item.name.toLowerCase().includes(needle) || item.secid.includes(needle))
     }
     const direction = sortDir === 'desc' ? -1 : 1
-    return list.sort((left, right) => (left[sortKey] - right[sortKey]) * direction)
+    return list.sort((left, right) => {
+      const leftValue = left[sortKey]
+      const rightValue = right[sortKey]
+      if (leftValue == null && rightValue == null) return 0
+      if (leftValue == null) return 1
+      if (rightValue == null) return -1
+      return (leftValue - rightValue) * direction
+    })
   }, [data, sortKey, sortDir, query])
 
   if (loading && !data) return <div className="page-loading">正在拉取东方财富行情…</div>
@@ -917,6 +927,7 @@ function MarketPage({
 
   const pctColor = (pct: number) => pct > 0.05 ? 'var(--market-up, #ff4d4f)' : pct < -0.05 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
   const flowColor = (value: number) => value > 0 ? 'var(--market-up, #ff4d4f)' : value < 0 ? 'var(--market-down, #52c41a)' : 'var(--market-flat, #8c8c8c)'
+  const comparisonText = (value: number | null) => value == null ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
   const sortMark = (key: MarketSortKey) => sortKey === key ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''
   const typeLabel = (type: string) => type === 'industry' ? '行业' : type === 'concept' ? '概念' : type === 'etf' ? 'ETF' : '板块'
 
@@ -935,6 +946,10 @@ function MarketPage({
           <div className="market-pinned-header"><strong>{item.name}</strong><small>{item.secid}</small></div>
           <div className="market-pinned-price">{item.price.toFixed(2)}</div>
           <div className="market-pinned-pct" style={{ color: pctColor(item.pct) }}>{item.pct > 0 ? '+' : ''}{item.pct.toFixed(2)}% <small>{item.change > 0 ? '+' : ''}{item.change.toFixed(2)}</small></div>
+          <div className="market-pinned-comparisons">
+            <span>较上次刷新 <strong style={{ color: item.refresh_pct == null ? undefined : pctColor(item.refresh_pct) }}>{comparisonText(item.refresh_pct)}</strong></span>
+            <span title={item.month_base_date ? `基准交易日 ${item.month_base_date}` : undefined}>近一个月 <strong style={{ color: item.month_pct == null ? undefined : pctColor(item.month_pct) }}>{comparisonText(item.month_pct)}</strong></span>
+          </div>
           {item.main_net_yi !== 0 && <div className="market-pinned-flow" style={{ color: flowColor(item.main_net_yi) }}>主力 {item.main_net_yi > 0 ? '+' : ''}{item.main_net_yi.toFixed(2)}亿</div>}
           {item.up_count + item.down_count > 0 && <div className="market-pinned-breadth"><span style={{ color: 'var(--market-up, #ff4d4f)' }}>↑{item.up_count}</span><span style={{ color: 'var(--market-flat, #8c8c8c)' }}>—{item.flat_count}</span><span style={{ color: 'var(--market-down, #52c41a)' }}>↓{item.down_count}</span></div>}
         </article>
@@ -954,6 +969,8 @@ function MarketPage({
           <span>类型</span>
           <span>最新价</span>
           <span className="market-sortable" onClick={() => toggleSort('pct')}>涨跌幅{sortMark('pct')}</span>
+          <span className="market-sortable" onClick={() => toggleSort('refresh_pct')}>较上次刷新{sortMark('refresh_pct')}</span>
+          <span className="market-sortable" onClick={() => toggleSort('month_pct')}>近一个月{sortMark('month_pct')}</span>
           <span className="market-sortable" onClick={() => toggleSort('main_net_yi')}>主力净流入{sortMark('main_net_yi')}</span>
           <span className="market-sortable" onClick={() => toggleSort('amount_yi')}>成交额(亿){sortMark('amount_yi')}</span>
         </div>
@@ -963,6 +980,8 @@ function MarketPage({
             <span className="market-rest-type">{typeLabel(item.type)}</span>
             <span>{item.price.toFixed(item.type === 'etf' ? 3 : 2)}</span>
             <span style={{ color: pctColor(item.pct), fontWeight: 600 }}>{item.pct > 0 ? '+' : ''}{item.pct.toFixed(2)}%</span>
+            <span style={{ color: item.refresh_pct == null ? undefined : pctColor(item.refresh_pct), fontWeight: 600 }}>{comparisonText(item.refresh_pct)}</span>
+            <span title={item.month_base_date ? `基准交易日 ${item.month_base_date}` : undefined} style={{ color: item.month_pct == null ? undefined : pctColor(item.month_pct), fontWeight: 600 }}>{comparisonText(item.month_pct)}</span>
             <span style={{ color: flowColor(item.main_net_yi), fontWeight: 600 }}>{item.main_net_yi > 0 ? '+' : ''}{item.main_net_yi.toFixed(2)}</span>
             <span>{item.amount_yi > 0 ? item.amount_yi.toFixed(2) : '—'}</span>
           </div>

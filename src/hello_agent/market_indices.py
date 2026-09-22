@@ -34,6 +34,9 @@ _HEADERS = {"User-Agent": _UA, "Referer": _REFERER}
 _ULIST_FIELDS = "f2,f3,f4,f6,f12,f13,f14,f62,f66,f72,f78,f84,f184,f104,f105,f106,f152"
 _CLIST_FIELDS = _ULIST_FIELDS
 _PAGE_SIZE = 100
+_HISTORY_HOST = "https://push2his.eastmoney.com"
+_HISTORY_CONCURRENCY = 16
+_MONTH_LOOKBACK_DAYS = 30
 
 # ── 置顶指数 ──
 PINNED_INDICES = [
@@ -116,6 +119,38 @@ def _parse_diff(diff: Any, force_type: str | None = None) -> list[dict[str, Any]
     return [_parse_row(r, force_type) for r in rows]
 
 
+def _pct_change(current: Any, baseline: Any) -> float | None:
+    current_value = _to_num(current)
+    baseline_value = _to_num(baseline)
+    if current_value <= 0 or baseline_value <= 0:
+        return None
+    return round((current_value - baseline_value) / baseline_value * 100, 2)
+
+
+def _quote_prices(snapshot: dict[str, Any] | None) -> dict[str, float]:
+    if not snapshot:
+        return {}
+    prices: dict[str, float] = {}
+    for quote in [*snapshot.get("pinned", []), *snapshot.get("rest", [])]:
+        secid = str(quote.get("secid", ""))
+        price = _to_num(quote.get("price"))
+        if secid and price > 0:
+            prices[secid] = price
+    return prices
+
+
+def _parse_history_baseline(klines: Any) -> dict[str, Any] | None:
+    if not isinstance(klines, list) or not klines:
+        return None
+    parts = str(klines[-1]).split(",")
+    if len(parts) < 3:
+        return None
+    close = _to_num(parts[2])
+    if close <= 0:
+        return None
+    return {"date": parts[0], "price": close}
+
+
 async def _ulist_fetch(
     client: httpx.AsyncClient, secids: list[str]
 ) -> list[dict[str, Any]]:
@@ -168,6 +203,7 @@ async def _clist_fetch_all(
 
 async def fetch_market_indices() -> dict[str, Any]:
     """拉取置顶指数 + 全量行业板块 + 全量概念板块 + ETF。"""
+    previous = load_cache()
     ulist_secids = [s["secid"] for s in PINNED_INDICES] + [
         s["secid"] for s in ETF_LIST
     ]
@@ -206,9 +242,22 @@ async def fetch_market_indices() -> dict[str, Any]:
     rest = boards + etf
 
     now = datetime.now(timezone(timedelta(hours=8)))
+    quotes = pinned + rest
+    month_baselines = await _month_baselines(client=None, quotes=quotes, now=now)
+    previous_prices = _quote_prices(previous)
+    for quote in quotes:
+        secid = quote["secid"]
+        quote["refresh_pct"] = _pct_change(quote["price"], previous_prices.get(secid))
+        month_baseline = month_baselines.get(secid)
+        quote["month_pct"] = _pct_change(
+            quote["price"], month_baseline.get("price") if month_baseline else None
+        )
+        quote["month_base_date"] = month_baseline.get("date") if month_baseline else None
+
     result = {
         "date": now.strftime("%Y-%m-%d"),
         "generated_at": now.isoformat(),
+        "previous_generated_at": previous.get("generated_at") if previous else None,
         "count": len(pinned) + len(rest),
         "pinned": pinned,
         "rest": rest,
@@ -221,6 +270,7 @@ async def fetch_market_indices() -> dict[str, Any]:
 
 _CACHE_DIR = Path(os.environ.get("HELLO_AGENT_DATA_DIR", "/var/lib/hello-agent"))
 _CACHE_FILE = _CACHE_DIR / "market_indices_cache.json"
+_MONTH_BASELINE_FILE = _CACHE_DIR / "market_month_baselines.json"
 
 
 def _save_cache(data: dict[str, Any]) -> None:
@@ -238,6 +288,103 @@ def load_cache() -> dict[str, Any] | None:
     except Exception as exc:
         logger.warning("读取行情缓存失败: %s", exc)
     return None
+
+
+def cache_has_comparisons(cached: dict[str, Any] | None) -> bool:
+    if not cached:
+        return False
+    quotes = [*cached.get("pinned", []), *cached.get("rest", [])]
+    return bool(quotes) and all(
+        "refresh_pct" in quote and "month_pct" in quote for quote in quotes
+    )
+
+
+def _load_month_baseline_cache() -> dict[str, Any] | None:
+    try:
+        if _MONTH_BASELINE_FILE.exists():
+            return json.loads(_MONTH_BASELINE_FILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("读取月度行情基准失败: %s", exc)
+    return None
+
+
+def _save_month_baseline_cache(data: dict[str, Any]) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _MONTH_BASELINE_FILE.write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception as exc:
+        logger.warning("保存月度行情基准失败: %s", exc)
+
+
+async def _fetch_month_baseline(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    secid: str,
+    target: date,
+) -> tuple[str, dict[str, Any] | None]:
+    path = (
+        "/api/qt/stock/kline/get?"
+        f"secid={secid}&klt=101&fqt=1&lmt=1&end={target:%Y%m%d}"
+        "&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53"
+    )
+    async with semaphore:
+        try:
+            response = await client.get(f"{_HISTORY_HOST}{path}", headers=_HEADERS)
+            response.raise_for_status()
+            data = response.json().get("data") or {}
+            return secid, _parse_history_baseline(data.get("klines"))
+        except Exception as exc:
+            logger.warning("东财月度历史行情 %s 获取失败: %s", secid, exc)
+            return secid, None
+
+
+async def _month_baselines(
+    client: httpx.AsyncClient | None,
+    quotes: list[dict[str, Any]],
+    now: datetime,
+) -> dict[str, dict[str, Any]]:
+    target = now.date() - timedelta(days=_MONTH_LOOKBACK_DAYS)
+    target_text = target.isoformat()
+    cached = _load_month_baseline_cache()
+    baselines: dict[str, dict[str, Any]] = {}
+    if cached and cached.get("target_date") == target_text:
+        raw = cached.get("baselines")
+        if isinstance(raw, dict):
+            baselines = {
+                str(secid): value
+                for secid, value in raw.items()
+                if isinstance(value, dict)
+            }
+
+    secids = list(dict.fromkeys(str(quote["secid"]) for quote in quotes))
+    missing = [secid for secid in secids if secid not in baselines]
+    if missing:
+        owns_client = client is None
+        history_client = client or httpx.AsyncClient(timeout=_TIMEOUT)
+        try:
+            semaphore = asyncio.Semaphore(_HISTORY_CONCURRENCY)
+            results = await asyncio.gather(
+                *(
+                    _fetch_month_baseline(history_client, semaphore, secid, target)
+                    for secid in missing
+                )
+            )
+        finally:
+            if owns_client:
+                await history_client.aclose()
+        for secid, baseline in results:
+            if baseline is not None:
+                baselines[secid] = baseline
+        _save_month_baseline_cache(
+            {
+                "target_date": target_text,
+                "generated_at": now.isoformat(),
+                "baselines": baselines,
+            }
+        )
+    return baselines
 
 
 _CST = timezone(timedelta(hours=8))
@@ -285,6 +432,8 @@ def _cache_is_final(cached: dict[str, Any] | None) -> bool:
 
 def should_fetch(cached: dict[str, Any] | None) -> bool:
     """判断点击刷新时是否需要真正请求东财 API。"""
+    if not cache_has_comparisons(cached):
+        return True
     now = datetime.now(_CST)
     if _is_trading_session(now):
         return True

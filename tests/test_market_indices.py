@@ -18,7 +18,11 @@ from hello_agent.database import dispose_database_connections
 from hello_agent.market_indices import (
     _classify,
     _direction_label,
+    _parse_history_baseline,
     _parse_row,
+    _pct_change,
+    _quote_prices,
+    cache_has_comparisons,
     should_fetch,
 )
 
@@ -27,7 +31,7 @@ _SAMPLE = {
     "date": "2026-09-03",
     "generated_at": "2026-09-03T15:10:00+08:00",
     "count": 1,
-    "pinned": [{"name": "上证指数", "secid": "1.000001", "pct": 0.5}],
+    "pinned": [{"name": "上证指数", "secid": "1.000001", "pct": 0.5, "refresh_pct": 0.1, "month_pct": 2.5}],
     "rest": [],
     "board_count": 0,
     "etf_count": 0,
@@ -47,8 +51,29 @@ class MarketIndexParseTest(unittest.TestCase):
         self.assertEqual(_direction_label(-1.2)["direction"], "跌")
         self.assertEqual(_direction_label(0.01)["direction"], "平")
 
+    def test_comparison_values_use_previous_snapshot_and_history_close(self) -> None:
+        previous = {
+            "pinned": [{"secid": "1.000001", "price": 4000}],
+            "rest": [{"secid": "90.BK1305", "price": 250}],
+        }
+        self.assertEqual(_quote_prices(previous)["90.BK1305"], 250)
+        self.assertEqual(_pct_change(4100, 4000), 2.5)
+        self.assertEqual(_pct_change(240, 250), -4.0)
+        self.assertIsNone(_pct_change(100, None))
+
+        baseline = _parse_history_baseline(
+            ["2026-08-21,249.13,249.86", "2026-08-24,250.00,251.25"]
+        )
+        self.assertEqual(baseline, {"date": "2026-08-24", "price": 251.25})
+        self.assertIsNone(_parse_history_baseline([]))
+
 
 class MarketIndexCachePolicyTest(unittest.TestCase):
+    def test_legacy_cache_without_comparisons_requires_refresh(self) -> None:
+        legacy = {**_SAMPLE, "pinned": [{"secid": "1.000001", "price": 4000}]}
+        self.assertFalse(cache_has_comparisons(legacy))
+        self.assertTrue(should_fetch(legacy))
+
     def test_should_fetch_during_weekday_session(self) -> None:
         now = datetime(2026, 9, 3, 10, 0, tzinfo=_CST)
         with patch("hello_agent.market_indices.datetime") as mocked:

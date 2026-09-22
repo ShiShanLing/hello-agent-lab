@@ -1797,11 +1797,16 @@ def create_api(
         refresh: bool = Query(default=False),
         _admin: AdminPrincipal = Depends(current_admin),
     ) -> dict[str, object]:
-        from hello_agent.market_indices import fetch_market_indices, load_cache, should_fetch
+        from hello_agent.market_indices import (
+            cache_has_comparisons,
+            fetch_market_indices,
+            load_cache,
+            should_fetch,
+        )
 
         cached = load_cache()
         if not refresh:
-            if cached is not None:
+            if cache_has_comparisons(cached):
                 return cached
         else:
             if not should_fetch(cached):
